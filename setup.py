@@ -20,8 +20,8 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Topic :: Software Development :: Testing"
     ],
-    url='https://github.com/Trii/NoseGAE',
-    download_url='https://github.com/Trii/NoseGAE/tarball/' + VERSION,
+    url='',
+    download_url='',
     license='BSD License',
     entry_points={
         'nose.plugins.0.10': ['nosegae = nosegae:NoseGAE']
