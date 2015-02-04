@@ -82,12 +82,10 @@ class NoseGAE(Plugin):
         # to resolve https://github.com/Trii/NoseGAE/issues/14.
         # It may need to be removed in the future if Google changes the functionality
         import google.appengine.tools.os_compat
-
         from google.appengine.tools.devappserver2 import application_configuration
 
         # get the app id out of your app.yaml and stuff
         configuration = application_configuration.ApplicationConfiguration([self._app_path])
-
         os.environ['APPLICATION_ID'] = configuration.app_id
 
         self.is_doctests = options.enable_plugin_doctest
@@ -123,10 +121,15 @@ class NoseGAE(Plugin):
         self.testbed = testbed.Testbed()
         self.testbed.activate()
         # Give the test access to the active testbed
+
         the_test = test.test
         if isinstance(the_test, FunctionTestCase):
             the_test = the_test.test
         the_test.testbed = self.testbed
+
+        # Fix - no other way to inject app_id using NoseGAE, right ?
+        custom_app_id = getattr(test.test, "CUSTOM_APP_ID", None)
+        setup_env_done = False
 
         for stub_name, stub_init in testbed.INIT_STUB_METHOD_NAMES.iteritems():
             if not getattr(the_test, 'nosegae_%s' % stub_name, False):
@@ -145,10 +148,20 @@ class NoseGAE(Plugin):
                 task_args.update(stub_kwargs)
                 stub_kwargs = task_args
             elif stub_name == testbed.USER_SERVICE_NAME:
-                self.testbed.setup_env(overwrite=True,
-                                       USER_ID=stub_kwargs.pop('USER_ID', 'testuser'),
-                                       USER_EMAIL=stub_kwargs.pop('USER_EMAIL', 'testuser@example.org'),
-                                       USER_IS_ADMIN=stub_kwargs.pop('USER_IS_ADMIN', '1'))
+                if custom_app_id:
+                    self.testbed.setup_env(overwrite=True,
+                                           USER_ID=stub_kwargs.pop('USER_ID', 'testuser'),
+                                           USER_EMAIL=stub_kwargs.pop('USER_EMAIL', 'testuser@example.org'),
+                                           USER_IS_ADMIN=stub_kwargs.pop('USER_IS_ADMIN', '1'),
+                                           app_id=custom_app_id)
+                else:
+                    self.testbed.setup_env(overwrite=True,
+                                           USER_ID=stub_kwargs.pop('USER_ID', 'testuser'),
+                                           USER_EMAIL=stub_kwargs.pop('USER_EMAIL', 'testuser@example.org'),
+                                           USER_IS_ADMIN=stub_kwargs.pop('USER_IS_ADMIN', '1'))
+                setup_env_done = True
+            if not setup_env_done and custom_app_id:
+                self.testbed.setup_env(overwrite=True, app_id=custom_app_id)
             getattr(self.testbed, stub_init)(**stub_kwargs)
 
         if self.is_doctests:
@@ -196,3 +209,4 @@ class NoseGAE(Plugin):
                     taskqueue_stub=self.get_stub(testbed.TASKQUEUE_SERVICE_NAME))
                 self._register_stub(testbed.PROSPECTIVE_SEARCH_SERVICE_NAME, stub)
             testbed.Testbed.init_prospective_search_stub = init_prospective_search_stub
+
