@@ -2,7 +2,8 @@ from setuptools import setup
 
 DESCRIPTION = "NoseGAE: nose plugin for Google App Engine testing"
 
-VERSION = '0.5.1'
+VERSION = '0.5.7.1'
+
 
 
 setup(
@@ -18,7 +19,10 @@ setup(
         "Environment :: Console",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
-        "Topic :: Software Development :: Testing"
+        'Natural Language :: English',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python :: 2.7',
+        "Topic :: Software Development :: Testing",
     ],
     url='',
     download_url='',
