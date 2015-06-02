@@ -47,3 +47,6 @@ storage
 *.sqlite3
 
 .ropeproject
+venv
+google-cloud-sdk
+docs.zip

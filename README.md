@@ -1,5 +1,9 @@
 NoseGAE: Nose for Google App Engine Testing
 ==================================================
+[![PyPI](https://img.shields.io/pypi/v/NoseGAE.svg)](https://pypi.python.org/pypi/NoseGAE)
+[![Downloads](https://img.shields.io/pypi/dm/NoseGAE.svg)](https://pypi.python.org/pypi/NoseGAE)
+[![License](https://img.shields.io/pypi/l/NoseGAE.svg)](https://pypi.python.org/pypi/NoseGAE)
+[![Build Status](https://travis-ci.org/Trii/NoseGAE.svg?branch=master)](https://travis-ci.org/Trii/NoseGAE)
 
 ## Overview
 
@@ -13,7 +17,8 @@ write functional and unit tests for [Google App Engine](https://cloud.google.com
 	1. [Class Based Tests](#class-based-tests)
 	2. [Function Tests](#function-tests)
 	3. [Doctest](#doctest)
-3. [Changes in 0.4.0](#changes-in-0.4.0)
+3. [Changes in 0.5.2](#changes-in-052)
+4. [Changes in 0.4.0](#changes-in-040)
 
 
 ## What does it do?
@@ -26,10 +31,10 @@ your `app.yaml`, and sets the proper paths using `dev_appserver.fix_sys_path()`.
 
 ### Functional tests
 
-Consider the simple hello world application in `support/helloworld`:
+Consider the simple hello world application in `examples/helloworld`:
 
 
-```
+```python
 import webapp2
 from jinja2 import Environment
 
@@ -45,9 +50,9 @@ app = webapp2.WSGIApplication([('/', Hello)], debug=True)
 
 ```
 
-And a simple functional test suite `support/helloworld/test.py` for the application:
+And a simple functional test suite `examples/helloworld/test.py` for the application:
 
-```
+```python
 from webtest import TestApp
 import unittest
 import helloworld
@@ -84,9 +89,9 @@ Traceback (most recent call last):
     return self.importFromDir(dir_path, fqname)
   File "/Users/Josh/Developer/Github/jj/lib/python2.7/site-packages/nose-1.3.4-py2.7.egg/nose/importer.py", line 94, in importFromDir
     mod = load_module(part_fqname, fh, filename, desc)
-  File "/Users/Josh/Developer/Github/nosegae/support/helloworld/test.py", line 2, in <module>
+  File "/Users/Josh/Developer/Github/nosegae/examples/helloworld/test.py", line 2, in <module>
     import helloworld
-  File "/Users/Josh/Developer/Github/nosegae/support/helloworld/helloworld.py", line 1, in <module>
+  File "/Users/Josh/Developer/Github/nosegae/examples/helloworld/helloworld.py", line 1, in <module>
     import webapp2
 ImportError: No module named webapp2
 
@@ -118,9 +123,9 @@ App Engine datastore isn't available. However, since the NoseGAE
 plugin sets up the development environment around your test run, you
 can use models directly in your tests.
 
-Consider the `support/pets/models.py` file that includes some doctests:
+Consider the `examples/pets/models.py` file that includes some doctests:
 
-```
+```python
 from google.appengine.ext import ndb
 
 class Pet(ndb.Model):
@@ -184,10 +189,10 @@ Traceback (most recent call last):
   File "/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/doctest.py", line 2201, in runTest
     raise self.failureException(self.format_failure(new.getvalue()))
 AssertionError: Failed doctest test for models.Pet
-  File "/Users/Josh/Developer/Github/nosegae/support/pets/models.py", line 4, in Pet
+  File "/Users/Josh/Developer/Github/nosegae/examples/pets/models.py", line 4, in Pet
 
 ----------------------------------------------------------------------
-File "/Users/Josh/Developer/Github/nosegae/support/pets/models.py", line 15, in models.Pet
+File "/Users/Josh/Developer/Github/nosegae/examples/pets/models.py", line 15, in models.Pet
 Failed example:
     muffy_key = muffy.put()
 Exception raised:
@@ -252,7 +257,7 @@ named `testbed` to the instance of your test class and configures it based upon 
 
 This test uses the assigned `testbed` attribute to manually configure each test.
 
-```
+```python
 class MyTest(unittest.TestCase):
     def test_using_memcache(self):
         """Unit test using memcache"""
@@ -276,7 +281,7 @@ class MyTest(unittest.TestCase):
 The following test case shows how to write a test that uses the datastore stub based on the simple configuration
 method using `nosegae_<stubname>` and `nosegae_<stubname>_kwargs`.
 
-```
+```python
 class DataTest(unittest.TestCase):
     # enable the datastore stub
     nosegae_datastore_v3 = True
@@ -291,9 +296,9 @@ class DataTest(unittest.TestCase):
 ### Function Tests
 
 This test case uses the `testbed` instance assigned to the function to manually configure any needed stubs.
-See `support/function_manual_config`.
+See `examples/function_manual_config`.
 
-```
+```python
 def test_index():
     # test_index.testbed is assigned by the NoseGAE plugin
     test_index.testbed.init_taskqueue_stub(task_retry_seconds=42, root_path=os.path.dirname(__file__))
@@ -304,9 +309,9 @@ def test_index():
 ```
 
 The following test shows how to use the simple method while passing kwargs to the taskqueue
-stub's initialization method. See `support/issue42_task-queue` for full example code.
+stub's initialization method. See `examples/issue42_task-queue` for full example code.
  
-```
+```python
 def test_index():
     # Assume the `/` route fires off a task queue and should pass without exceptions
     app = TestApp(app)
@@ -328,9 +333,9 @@ test_index.nosegae_taskqueue_kwargs = dict(task_retry_seconds=42, root_path=os.p
 Doctests are a whole other beast. They still work but all `TestBed` configuration has to be done manually.
 NoseGAE uses the [nose doctest plugin](http://nose.readthedocs.org/en/latest/plugins/doctests.html) to inject
 a global variable named `testbed` into your doctest scope that contains the current active `TestBed` instance.
-See `support/pets/models.py` for full example.
+See `examples/pets/models.py` for full example.
 
-```
+```python
 class Pet(ndb.Model):
     """The Pet class provides storage for pets.
 
@@ -345,6 +350,15 @@ class Pet(ndb.Model):
     name = ndb.StringProperty(required=True)
     type = ndb.StringProperty(required=True, choices=("cat", "dog", "bird", "fish", "monkey"))
     breed = ndb.StringProperty()
+```
+## Changes in 0.5.2
+
+The 0.5.2 release introduces preliminary modules support by allowing multiple yaml or paths sent to the
+`--gae-application` command line option.
+
+```sh
+nosetests --with-gae \
+          --gae-application='app.yaml,mobile_frontend.yaml,static_backend.yaml,dispatch.yaml'
 ```
 
 ## Changes in 0.4.0

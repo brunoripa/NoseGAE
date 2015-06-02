@@ -59,22 +59,35 @@ class NoseGAE(Plugin):
                 "Python version must be 2.7 or greater, like the Google App Engine environment.  "
                 "Tests are running with: %s" % sys.version)
 
-        if options.gae_lib_root not in sys.path:
-            sys.path.append(options.gae_lib_root)
-
-        self._app_path = options.gae_app or config.workingDir
+        try:
+            self._app_path = options.gae_app.split(',')
+        except AttributeError:
+            self._app_path = [config.workingDir]
         self._data_path = options.gae_data or os.path.join(tempfile.gettempdir(),
                                                            'nosegae.sqlite3')
+
+        if options.gae_lib_root not in sys.path:
+            options.gae_lib_root = os.path.realpath(options.gae_lib_root)
+            sys.path.insert(0, options.gae_lib_root)
+
+        for path_ in self._app_path:
+            path_ = os.path.realpath(path_)
+            if not os.path.isdir(path_):
+                path_ = os.path.dirname(path_)
+            if path_ not in sys.path:
+                sys.path.append(path_)
 
         if 'google' in sys.modules:
             # make sure an egg (e.g. protobuf) is not cached
             # with the wrong path:
-            del sys.modules['google']
+            reload(sys.modules['google'])
         try:
             import appengine_config
         except ImportError:
             pass
 
+        # TODO: this may need to happen after parsing your yaml files in
+        # The case of modules but I need to investigate further
         import dev_appserver
         dev_appserver.fix_sys_path()  # add paths to libs specified in app.yaml, etc
 
@@ -85,10 +98,21 @@ class NoseGAE(Plugin):
         from google.appengine.tools.devappserver2 import application_configuration
 
         # get the app id out of your app.yaml and stuff
-        configuration = application_configuration.ApplicationConfiguration([self._app_path])
-        os.environ['APPLICATION_ID'] = configuration.app_id
+        self.configuration = application_configuration.ApplicationConfiguration(self._app_path)
+
+        os.environ['APPLICATION_ID'] = self.configuration.app_id
+        # simulate same environment as devappserver2
+        os.environ['CURRENT_VERSION_ID'] = self.configuration.modules[0].version_id
 
         self.is_doctests = options.enable_plugin_doctest
+
+        # As of SDK 0.2.5 the dev_appserver.py aggressively adds some logging handlers.
+        # This removes the handlers but note that Nose will still capture logging and
+        # report it during failures.  See Issue 25 for more info.
+        rootLogger = logging.getLogger()
+        for handler in rootLogger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                rootLogger.removeHandler(handler)
 
     def startTest(self, test):
         """Initializes Testbed stubs based off of attributes of the executing test
@@ -136,18 +160,14 @@ class NoseGAE(Plugin):
                 continue
             stub_kwargs = getattr(the_test, 'nosegae_%s_kwargs' % stub_name, {})
             if stub_name == testbed.TASKQUEUE_SERVICE_NAME:
-                # root_path is required so the stub can find queue.yaml
-                task_args = dict(root_path=self._app_path)
-                task_args.update(stub_kwargs)
-                stub_kwargs = task_args
+                self._init_taskqueue_stub(**stub_kwargs)
             elif stub_name == testbed.DATASTORE_SERVICE_NAME:
                 if not self.testbed.get_stub(testbed.MEMCACHE_SERVICE_NAME):
                     # ndb requires memcache so enable it as well as the datastore_v3
                     self.testbed.init_memcache_stub()
-                task_args = dict(datastore_file=self._data_path)
-                task_args.update(stub_kwargs)
-                stub_kwargs = task_args
+                self._init_datastore_v3_stub(**stub_kwargs)
             elif stub_name == testbed.USER_SERVICE_NAME:
+
                 if custom_app_id:
                     self.testbed.setup_env(overwrite=True,
                                            USER_ID=stub_kwargs.pop('USER_ID', 'testuser'),
@@ -163,6 +183,7 @@ class NoseGAE(Plugin):
             if not setup_env_done and custom_app_id:
                 self.testbed.setup_env(overwrite=True, app_id=custom_app_id)
             getattr(self.testbed, stub_init)(**stub_kwargs)
+
 
         if self.is_doctests:
             self._doctest_compat(the_test)
@@ -210,3 +231,68 @@ class NoseGAE(Plugin):
                 self._register_stub(testbed.PROSPECTIVE_SEARCH_SERVICE_NAME, stub)
             testbed.Testbed.init_prospective_search_stub = init_prospective_search_stub
 
+<<<<<<< HEAD
+=======
+    def _init_taskqueue_stub(self, **stub_kwargs):
+        """Initializes the taskqueue stub using nosegae config magic"""
+        task_args = {}
+        # root_path is required so the stub can find 'queue.yaml' or 'queue.yml'
+        if 'root_path' not in stub_kwargs:
+            for p in self._app_path:
+                # support --gae-application values that may be a .yaml file
+                dir_ = os.path.dirname(p) if os.path.isfile(p) else p
+                if os.path.isfile(os.path.join(dir_, 'queue.yaml')) or \
+                        os.path.isfile(os.path.join(dir_, 'queue.yml')):
+                    task_args['root_path'] = dir_
+                    break
+        task_args.update(stub_kwargs)
+        self.testbed.init_taskqueue_stub(**task_args)
+
+    def _init_datastore_v3_stub(self, **stub_kwargs):
+        """Initializes the datastore stub using nosegae config magic"""
+        task_args = dict(datastore_file=self._data_path)
+        task_args.update(stub_kwargs)
+        self.testbed.init_datastore_v3_stub(**task_args)
+
+    def _init_user_stub(self, **stub_kwargs):
+        """Initializes the user stub using nosegae config magic"""
+        # do a little dance to keep the same kwargs for multiple tests in the same class
+        # because the user stub will barf if you pass these items into it
+        # stub = user_service_stub.UserServiceStub(**stub_kw_args)
+        # TypeError: __init__() got an unexpected keyword argument 'USER_IS_ADMIN'
+        task_args = stub_kwargs.copy()
+        self.testbed.setup_env(overwrite=True,
+                               USER_ID=task_args.pop('USER_ID', 'testuser'),
+                               USER_EMAIL=task_args.pop('USER_EMAIL', 'testuser@example.org'),
+                               USER_IS_ADMIN=task_args.pop('USER_IS_ADMIN', '1'))
+        self.testbed.init_user_stub(**task_args)
+
+    def _init_modules_stub(self, **_):
+        """Initializes the modules stub based off of your current yaml files
+
+        Implements solution from
+        http://stackoverflow.com/questions/28166558/invalidmoduleerror-when-using-testbed-to-unit-test-google-app-engine
+        """
+        from google.appengine.api import request_info
+        # edit all_versions per modules & versions thereof needing tests
+        all_versions = {}  # {'default': [1], 'andsome': [2], 'others': [1]}
+        def_versions = {}  # {m: all_versions[m][0] for m in all_versions}
+        m2h = {}  # {m: {def_versions[m]: 'localhost:8080'} for m in def_versions}
+        for module in self.configuration.modules:
+            module_name = module._module_name or 'default'
+            module_version = module._version or '1'
+            all_versions[module_name] = [module_version]
+            def_versions[module_name] = module_version
+            m2h[module_name] = {module_version: 'localhost:8080'}
+
+        request_info._local_dispatcher = request_info._LocalFakeDispatcher(
+            module_names=list(all_versions),
+            module_name_to_versions=all_versions,
+            module_name_to_default_versions=def_versions,
+            module_name_to_version_to_hostname=m2h)
+        self.testbed.init_modules_stub()
+
+    def _init_stub(self, stub_init, **stub_kwargs):
+        """Initializes all other stubs for consistency's sake"""
+        getattr(self.testbed, stub_init, lambda **kwargs: None)(**stub_kwargs)
+>>>>>>> upstream/master
